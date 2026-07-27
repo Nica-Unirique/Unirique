@@ -16,6 +16,11 @@ const ADRESSE_LOCALE := "127.0.0.1"
 const DELAI_DEMARRAGE := 1.0
 const DELAI_ESSAI := 0.5
 const ESSAIS_MAX := 20
+## Temps laissé à UNE adresse pour aboutir. ENet, lui, met une trentaine de
+## secondes à conclure qu'une adresse ne répond pas — et il ne le dit pas
+## toujours. Avec cinq IPv6 devant l'IPv4 qui marche, s'en remettre à lui
+## laissait le joueur plus de deux minutes devant un écran noir.
+const DELAI_TENTATIVE := 3.0
 ## Ports testés à partir de celui demandé. Le serveur précédent peut tenir
 ## encore le sien : on prend le suivant plutôt que d'attendre qu'il meure.
 const PORTS_TESTES := 16
@@ -491,11 +496,49 @@ func _essayer_connexion(pour_session: int) -> void:
 	essais_connexion += 1
 	var pair := ENetMultiplayerPeer.new()
 	if pair.create_client(adresse_serveur, port_serveur) != OK:
-		_reessayer(DELAI_ESSAI)
+		_echec_tentative(DELAI_ESSAI)
 		return
 	multiplayer.multiplayer_peer = pair
+	# On ne compte pas sur ENet pour renoncer : c'est nous qui décidons quand
+	# cette adresse a eu sa chance.
+	get_tree().create_timer(DELAI_TENTATIVE).timeout.connect(
+		_expirer_tentative.bind(session, essais_connexion), CONNECT_ONE_SHOT
+	)
 
 
+## Cette adresse n'a pas abouti dans le temps imparti. Les deux gardes écartent
+## les minuteries périmées : on a pu changer de cible (session) ou déjà relancer
+## une tentative (essai) entre-temps.
+func _expirer_tentative(pour_session: int, pour_essai: int) -> void:
+	if pour_session != session or pour_essai != essais_connexion:
+		return
+	if multiplayer.multiplayer_peer == null:
+		return
+	if multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+		return
+	print("Sans réponse : ", adresse_serveur, ":", port_serveur)
+	multiplayer.multiplayer_peer = null
+	_echec_tentative(DELAI_ESSAI)
+
+
+## Un échec est un échec, qu'il vienne du refus immédiat de `create_client` ou
+## d'un délai réseau écoulé : dans les deux cas cette adresse-ci ne répond pas,
+## et c'est à la suivante de tenter sa chance.
+##
+## Les distinguer a coûté une session de test. Une machine sans IPv6 fait
+## échouer `create_client` SUR-LE-CHAMP ; ce chemin-là réessayait la même
+## adresse morte vingt fois puis renonçait, sans jamais atteindre l'IPv4 du
+## même réseau local qui, elle, marchait.
+func _echec_tentative(delai: float) -> void:
+	if not replis.is_empty():
+		_essayer_repli_suivant()
+		return
+	_reessayer(delai)
+
+
+## Insiste sur l'adresse COURANTE. C'est ce qu'il faut pour notre serveur local,
+## qui met un instant à ouvrir son port — pas pour un serveur distant, où c'est
+## `_echec_tentative` qui décide.
 func _reessayer(delai: float) -> void:
 	if essais_connexion >= ESSAIS_MAX:
 		push_warning("Serveur injoignable : %s:%d" % [adresse_serveur, port_serveur])
@@ -517,12 +560,8 @@ func _connecte() -> void:
 
 func _connexion_echouee() -> void:
 	multiplayer.multiplayer_peer = null
-	# Une autre adresse reste à essayer : inutile d'insister sur celle-ci. Une
-	# IPv6 injoignable ne le deviendra pas en réessayant vingt fois.
-	if not replis.is_empty():
-		_essayer_repli_suivant()
-		return
-	_reessayer(DELAI_ESSAI)
+	# Une IPv6 injoignable ne le deviendra pas en réessayant vingt fois.
+	_echec_tentative(DELAI_ESSAI)
 
 
 ## Le serveur local est notre processus fils : il ne doit pas nous survivre.
