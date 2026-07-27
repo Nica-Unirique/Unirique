@@ -22,6 +22,12 @@ $Racine = $PSScriptRoot
 $Projet = Join-Path $Racine "Clients\client-godot"
 $Release = Join-Path $Racine "release"
 
+# Tous nos chemins partent de $PSScriptRoot, mais gh deduit le depot du
+# repertoire COURANT. Lancer le script depuis ailleurs le faisait donc echouer
+# a la toute derniere etape, apres avoir tout recompile, sur un « publication
+# refusee » qui n'expliquait rien.
+Set-Location $Racine
+
 # Publie pour etre telecharge, mais VOLONTAIREMENT absent du manifeste : le
 # lanceur est en cours d'execution quand il se mettrait a jour, et Windows
 # refuse de remplacer un exe verrouille. Il ne se met donc jamais a jour
@@ -37,7 +43,17 @@ $Modules = [ordered]@{
 }
 
 function Etape($texte) { Write-Host "`n=== $texte" -ForegroundColor Cyan }
-function Echec($texte) { Write-Host "[ERREUR] $texte" -ForegroundColor Red; exit 1 }
+
+# Sur echec, on ressort ce que l'outil avait a dire. Sans ca, un « publication
+# refusee » nu obligeait a rejouer la commande a la main pour apprendre le
+# motif — l'information existait, on la jetait.
+function Echec($texte) {
+    Write-Host "[ERREUR] $texte" -ForegroundColor Red
+    if ($script:DerniereSortie) {
+        Write-Host ($script:DerniereSortie -join "`n") -ForegroundColor DarkGray
+    }
+    exit 1
+}
 
 # Les outils en ligne de commande ecrivent leur progression sur la sortie
 # d'erreur — cargo comme Godot. Avec ErrorActionPreference a "Stop", PowerShell
@@ -46,7 +62,7 @@ function Echec($texte) { Write-Host "[ERREUR] $texte" -ForegroundColor Red; exit
 function Executer($exe, $arguments) {
     $ancien = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & $exe @arguments 2>&1 | ForEach-Object { "$_" } | Out-Null
+    $script:DerniereSortie = & $exe @arguments 2>&1 | ForEach-Object { "$_" }
     $code = $LASTEXITCODE
     $ErrorActionPreference = $ancien
     return $code
