@@ -53,7 +53,7 @@ const Compte := preload("res://scripts/compte.gd")
 
 ## Relayé depuis un sous-menu vers le client. Le menu ne sait pas s'y connecter
 ## lui-même : rejoindre un serveur n'est pas son affaire.
-signal rejoindre_serveur(adresses: Array)
+signal rejoindre_serveur(serveur_id: String, adresses: Array)
 
 ## Injectés par client.gd AVANT add_child (donc lisibles dès _ready).
 var vr: VrRig
@@ -444,9 +444,9 @@ func _charger_contenu(i: int) -> Control:
 
 
 ## Fermer le menu en passant : on va dans le monde, pas dans une liste.
-func _relayer_rejoindre(adresses: Array) -> void:
+func _relayer_rejoindre(serveur_id: String, adresses: Array) -> void:
 	_fermer()
-	rejoindre_serveur.emit(adresses)
+	rejoindre_serveur.emit(serveur_id, adresses)
 
 
 ## --- Panneau VR : placement et pointeur ---

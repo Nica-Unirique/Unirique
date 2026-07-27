@@ -88,6 +88,10 @@ var menu_arme := true
 
 ## Serveur lancé par ce client. -1 = aucun (on a rejoint un serveur distant).
 var serveur_local := -1
+## Identifiant d'annuaire du serveur DISTANT qu'on rejoint, "" sinon. Quand on
+## héberge, c'est `annonce` qui renseigne la présence ; ici c'est à nous, sinon
+## nos amis nous verraient en ligne mais nulle part.
+var serveur_rejoint := ""
 ## Vrai quand c'est NOUS qui hébergeons. Le serveur suit alors le jeu courant.
 var heberge := false
 var jeu_courant := ""
@@ -385,8 +389,10 @@ func _port_libre() -> int:
 ## Rejoint le serveur d'un ami. L'annuaire en donne plusieurs adresses, de la
 ## meilleure à la pire : IPv6 globale d'abord (aucun NAT à traverser), replis
 ## ensuite. On les essaie dans l'ordre.
-func _rejoindre_adresse(adresses: Array) -> void:
+func _rejoindre_adresse(serveur_id: String, adresses: Array) -> void:
 	quitter()
+	# Après `quitter`, qui l'efface : on entre chez quelqu'un, on ne quitte pas.
+	serveur_rejoint = serveur_id
 	replis.clear()
 	for brute in adresses:
 		var coupe := _couper_adresse(brute)
@@ -446,6 +452,7 @@ func quitter() -> void:
 	replis.clear()
 	heberge = false
 	mon_avatar = 0
+	serveur_rejoint = ""
 
 	if multiplayer.multiplayer_peer != null:
 		multiplayer.multiplayer_peer.close()
@@ -500,6 +507,12 @@ func _reessayer(delai: float) -> void:
 
 func _connecte() -> void:
 	print("Connecté au serveur, joueur ", multiplayer.get_unique_id())
+	# Seulement MAINTENANT : on y est vraiment. L'annoncer dès la demande de
+	# connexion reviendrait à se dire chez un ami avant d'avoir su l'y joindre —
+	# et les adresses de repli sont justement là parce que ça arrive.
+	if not serveur_rejoint.is_empty():
+		compte.serveur_courant = serveur_rejoint
+		compte.signaler_presence()
 
 
 func _connexion_echouee() -> void:
@@ -534,6 +547,12 @@ func _serveur_perdu() -> void:
 	push_warning("Serveur perdu")
 	multiplayer.multiplayer_peer = null
 	_tout_retirer()
+	# Ne pas laisser nos amis nous croire encore là-bas : l'hôte a fermé, et
+	# l'annuaire n'a aucun moyen de l'apprendre autrement que par nous.
+	if not serveur_rejoint.is_empty():
+		serveur_rejoint = ""
+		compte.serveur_courant = ""
+		compte.signaler_presence()
 
 
 ## --- Réception de la scène ---

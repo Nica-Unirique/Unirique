@@ -28,8 +28,10 @@ const ETATS_TEXTE := [
 ]
 
 ## Relayé jusqu'au client par le menu : rejoindre un monde n'est pas l'affaire
-## d'une liste d'amis.
-signal rejoindre_serveur(adresses: Array)
+## d'une liste d'amis. L'identifiant accompagne les adresses parce que le client
+## devra l'annoncer à l'annuaire — sans lui on serait bien connecté quelque part,
+## mais personne ne pourrait dire où.
+signal rejoindre_serveur(serveur_id: String, adresses: Array)
 
 ## Injecté par menu.gd avant `add_child`.
 var compte: Compte
@@ -351,7 +353,7 @@ func _rejoindre(serveur_id: String) -> void:
 		statut.text = statut_texte
 		return
 	# Le client les essaiera dans l'ordre : IPv6 d'abord, repli ensuite.
-	rejoindre_serveur.emit(adresses)
+	rejoindre_serveur.emit(serveur_id, adresses)
 
 
 ## Toute action se termine par un rafraîchissement : c'est le serveur qui dit

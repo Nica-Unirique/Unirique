@@ -34,6 +34,13 @@ const GRAVITE := 20.0
 const TAILLE_JOUEUR := Vector3(0.8, 1.8, 0.8)
 const HAUTEUR_APPARITION := 2.0
 const COULEURS_JOUEUR := [0xFF3399FF, 0xFF33CC66, 0xFFCC5533, 0xFFCCCC33]
+
+## Emplacements d'apparition répartis sur un anneau. Un point unique les faisait
+## tous naître au MÊME endroit : deux joueurs superposés, chacun avec sa caméra
+## dans le corps de l'autre, donc mutuellement invisibles. Les faces arrière
+## étant éliminées au rendu, on ne voyait rien du tout — pas même une boîte.
+const NB_PLACES := 8
+const RAYON_APPARITION := 4.0
 const NB_CODES := 7
 
 ## Valeurs d'entrée de chaque joueur : un PackedFloat32Array de NB_CODES, 0.0..1.0.
@@ -43,7 +50,9 @@ var entrees := {}
 var lacets := {}
 ## Objet de scène qui porte l'avatar de chaque joueur.
 var objets_joueur := {}
-var prochaine_couleur := 0
+## Rang du prochain arrivant. Il choisit à la fois sa couleur et sa place :
+## deux joueurs présents en même temps ont donc toujours des rangs différents.
+var prochaine_place := 0
 var temps_depuis_envoi := 0.0
 
 var auto_quitter := false
@@ -230,13 +239,22 @@ func _joueur_part(id: int) -> void:
 func _creer_avatar() -> int:
 	var objet := creer_objet(CharacterBody3D.new())
 	_set_scale(objet, TAILLE_JOUEUR.x, TAILLE_JOUEUR.y, TAILLE_JOUEUR.z)
-	_set_color(objet, COULEURS_JOUEUR[prochaine_couleur % COULEURS_JOUEUR.size()])
+	_set_color(objet, COULEURS_JOUEUR[prochaine_place % COULEURS_JOUEUR.size()])
 	# On apparaît en l'air : la gravité pose l'avatar sur le sol, quelle que
 	# soit la hauteur à laquelle le jeu l'a construit.
-	_set_position(objet, 0.0, HAUTEUR_APPARITION, 4.0)
+	var place := _place_libre()
+	_set_position(objet, place.x, HAUTEUR_APPARITION, place.z)
 	_set_sync(objet, 1)  # autorité serveur
-	prochaine_couleur += 1
+	prochaine_place += 1
 	return objet
+
+
+## Point d'apparition du prochain arrivant, sur l'anneau. Au-delà de `NB_PLACES`
+## on recommence : le neuvième joueur reprend la place du premier, qui aura eu
+## tout le temps de s'en écarter.
+func _place_libre() -> Vector3:
+	var angle := TAU * float(prochaine_place % NB_PLACES) / float(NB_PLACES)
+	return Vector3(sin(angle), 0.0, cos(angle)) * RAYON_APPARITION
 
 
 func _deplacer_joueurs(delta: float) -> void:
