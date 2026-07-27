@@ -1,8 +1,11 @@
 # --- Produits de compilation -------------------------------------------------
 # Reconstruits par build.bat. Les publier gonflerait le depot sans rien apporter :
 # c'est aux releases GitHub de porter les binaires, pas a l'historique git.
-/target/
-/Servers/Server_Data/target/
+# Sans barre oblique en tete : a n'importe quelle profondeur. Les lister un a un
+# a deja echoue — le target/ du lanceur manquait, et 724 fichiers de build sont
+# entres dans un commit. Toute crate ajoutee ensuite serait retombee dans le
+# meme piege.
+target/
 # release/ : exactement ce qu'un joueur telecharge, reconstruit a chaque version
 # par le script de publication. C'est aux releases GitHub de le porter.
 /release/

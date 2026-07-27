@@ -22,6 +22,12 @@ $Racine = $PSScriptRoot
 $Projet = Join-Path $Racine "Clients\client-godot"
 $Release = Join-Path $Racine "release"
 
+# Publie pour etre telecharge, mais VOLONTAIREMENT absent du manifeste : le
+# lanceur est en cours d'execution quand il se mettrait a jour, et Windows
+# refuse de remplacer un exe verrouille. Il ne se met donc jamais a jour
+# lui-meme — c'est ce qui impose qu'il reste simple et stable.
+$HorsManifeste = @("unirique-launcher.exe")
+
 # Quel module compile va ou. Ajouter un jeu = ajouter une ligne.
 $Modules = [ordered]@{
     "identity"   = "Clients\client-godot\identity.wasm"
@@ -56,6 +62,16 @@ $Gh = (Get-Command gh -ErrorAction SilentlyContinue).Source
 if (-not $Gh) { $Gh = "$env:ProgramFiles\GitHub CLI\gh.exe" }
 if (-not (Test-Path $Gh)) { Echec "GitHub CLI introuvable. winget install GitHub.cli" }
 
+# Un client encore ouvert verrouille godot-wasm.dll, et l'export ne peut pas
+# vider release/. On le voit MAINTENANT plutot qu'apres plusieurs minutes de
+# compilation, quand l'echec est le plus penible.
+$occupants = Get-Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path.StartsWith($Release) }
+if ($occupants) {
+    $noms = ($occupants | ForEach-Object { "$($_.Name) (pid $($_.Id))" }) -join ", "
+    Echec "ferme d'abord le client : $noms"
+}
+
 # --- 1. Modules WASM ------------------------------------------------------
 
 Etape "Compilation des modules WASM"
@@ -83,6 +99,15 @@ foreach ($module in $Modules.Keys) {
 Copy-Item (Join-Path $Racine "Norms\identity\Rust\wordlist.txt") `
           (Join-Path $Projet "wordlist.txt") -Force
 
+Etape "Compilation du lanceur"
+$Lanceur = Join-Path $Racine "Clients\launcher"
+Push-Location $Lanceur
+$code = Executer "cargo" @("build", "--release")
+Pop-Location
+if ($code -ne 0) { Echec "compilation du lanceur echouee" }
+$LanceurExe = Join-Path $Lanceur "target\release\unirique-launcher.exe"
+if (-not (Test-Path $LanceurExe)) { Echec "lanceur non produit" }
+
 # --- 2. Export Godot ------------------------------------------------------
 
 Etape "Export du client"
@@ -95,6 +120,8 @@ Executer $Godot @("--headless", "--path", $Projet, "--export-release", "Windows 
 if (-not (Test-Path (Join-Path $Release "unirique.exe"))) { Echec "export echoue" }
 
 Copy-Item (Join-Path $Projet "Games") (Join-Path $Release "Games") -Recurse -Force
+# Apres l'export : celui-ci vide release/ au passage.
+Copy-Item $LanceurExe $Release -Force
 
 # --- 3. Manifeste ---------------------------------------------------------
 
@@ -109,6 +136,13 @@ $aEnvoyer = @()
 foreach ($f in Get-ChildItem $Release -Recurse -File | Where-Object { $_.FullName -notlike "$Depot*" }) {
     $chemin = $f.FullName.Substring($Release.Length + 1).Replace("\", "/")
     $asset = $chemin.Replace("/", "_")
+
+    # Envoye pour etre telecharge a la main, jamais suivi par la mise a jour.
+    if ($HorsManifeste -contains $f.Name) {
+        $aEnvoyer += $f.FullName
+        Write-Host ("  {0,10:N0} o  {1}  (hors manifeste)" -f $f.Length, $chemin)
+        continue
+    }
     $fichiers += [ordered]@{
         chemin = $chemin
         asset  = $asset
@@ -151,7 +185,13 @@ if ((Executer $Gh @("release", "view", $etiquette)) -eq 0) {
 
 $arguments = @("release", "create", $etiquette) + $aEnvoyer + @(
     "--title", "Unirique $Version",
-    "--notes", "Version $Version. Le lanceur telecharge automatiquement ce qui a change."
+    "--notes", @"
+Version $Version.
+
+Telecharge ``unirique-launcher.exe`` et lance-le : il installe le jeu et le
+tient a jour tout seul. Les versions suivantes ne retelechargeront que ce qui
+a change — inutile de revenir ici.
+"@
 )
 if ((Executer $Gh $arguments) -ne 0) { Echec "publication refusee" }
 

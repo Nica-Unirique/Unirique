@@ -13,9 +13,12 @@ const Data := preload("res://scripts/data.gd")
 const FICHIER := "user://compte.json"
 
 ## Doit rester cohérent avec `presence.ping_intervalle_secondes` de config.csv,
-## côté serveur, où le seuil « en ligne » vaut trois pings. Trop long ici et on
-## paraîtrait hors ligne en jouant.
-const PING_SECONDES := 120.0
+## côté serveur, où le seuil `en_ligne_seuil_secondes` vaut douze fois ça.
+##
+## Ce couplage a déjà mordu : la valeur a été portée à 120 ici pendant que le
+## seuil serveur restait à 60, et les joueurs clignotaient entre en ligne et
+## hors ligne. Changer l'une sans l'autre casse la présence en silence.
+const PING_SECONDES := 5.0
 
 signal change
 

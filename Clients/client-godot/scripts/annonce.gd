@@ -43,7 +43,13 @@ func _ready() -> void:
 ## publie rien — et on ne dira donc jamais à personne où l'on joue.
 func publier(port: int, jeu: String) -> void:
 	arreter()
-	if not compte.connecte or not Settings.get_value("server.publish"):
+	# Se taire ici a déjà coûté une session de test : personne ne voyait
+	# l'hôte, et rien n'expliquait pourquoi. Un refus doit dire son motif.
+	if not compte.connecte:
+		print("[annonce] pas de compte : serveur non publié")
+		return
+	if not Settings.get_value("server.publish"):
+		print("[annonce] réglage server.publish désactivé : serveur non publié")
 		return
 	port_publie = port
 	jeu_publie = jeu

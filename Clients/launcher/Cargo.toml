@@ -1,0 +1,27 @@
+[package]
+name = "unirique_launcher"
+version = "0.1.0"
+edition = "2021"
+
+# Workspace a lui : le workspace racine compile pour wasm32, ou ce binaire natif
+# n'aurait aucun sens.
+[workspace]
+
+[[bin]]
+name = "unirique-launcher"
+path = "src/main.rs"
+
+[dependencies]
+# ureq : client HTTP bloquant. Pas d'async ici — le lanceur fait une chose a la
+# fois, un moteur asynchrone ne ferait que grossir le binaire.
+ureq = { version = "2", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+# Un lanceur doit etre petit : c'est le seul fichier qu'on envoie a la main.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
