@@ -1,0 +1,15 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["rlib"]
+
+# L'interrupteur de compilation : un module WASM ne doit declarer QUE les
+# fonctions que son hote fournit. Un jeu client ne doit jamais reclamer
+# `server.*`, et inversement — sinon il refuse de se charger.
+[features]
+default = ["client"]
+client = []
+server = []

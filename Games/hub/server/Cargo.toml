@@ -1,0 +1,12 @@
+[package]
+name = "hub_server"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Cote autorite : pas de `client`, sinon le module reclamerait des fonctions
+# que le serveur ne fournit pas.
+api = { path = "../../../Norms/api/Rust", default-features = false, features = ["server"] }

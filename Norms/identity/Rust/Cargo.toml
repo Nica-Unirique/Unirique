@@ -1,0 +1,15 @@
+[package]
+name = "identity"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Pas de feature "rand" sur bip39 : ce module ne GENERE rien, il ne fait que
+# lire une phrase. C'est ce qui lui evite `getrandom`, indisponible sur
+# wasm32-unknown-unknown — et ce qui le rend deterministe et sans import.
+bip39 = "2"
+ed25519-dalek = "2"
+hex = "0.4"

@@ -1,0 +1,42 @@
+# --- Produits de compilation -------------------------------------------------
+# Reconstruits par build.bat. Les publier gonflerait le depot sans rien apporter :
+# c'est aux releases GitHub de porter les binaires, pas a l'historique git.
+/target/
+/Servers/Server_Data/target/
+# release/ : exactement ce qu'un joueur telecharge, reconstruit a chaque version
+# par le script de publication. C'est aux releases GitHub de le porter.
+/release/
+/Clients/client-godot/Export/
+
+# Modules WASM copies dans le projet Godot depuis target/
+/Clients/client-godot/Games/*/client.wasm
+/Clients/client-godot/Games/*/server.wasm
+/Clients/client-godot/identity.wasm
+
+# Liste BIP39, extraite de la crate bip39 (voir extraire_liste_des_mots)
+/Norms/identity/Rust/wordlist.txt
+/Clients/client-godot/wordlist.txt
+
+# --- Extension godot-wasm ----------------------------------------------------
+# Copies temporaires que Godot laisse quand la DLL est verrouillee : 11 Mo piece,
+# et aucune valeur.
+/Clients/client-godot/godot-wasm/addons/godot-wasm/bin/windows/~*
+# Sous-produits de l'editeur de liens, inutiles a l'execution.
+/Clients/client-godot/godot-wasm/addons/godot-wasm/bin/windows/*.lib
+/Clients/client-godot/godot-wasm/addons/godot-wasm/bin/windows/*.exp
+# Binaires des autres plateformes : 51 Mo pour une beta Windows. Les recuperer
+# se fait en reinstallant l'extension depuis l'AssetLib.
+/Clients/client-godot/godot-wasm/addons/godot-wasm/bin/linux/
+/Clients/client-godot/godot-wasm/addons/godot-wasm/bin/macos/
+
+# --- Caches et etats locaux --------------------------------------------------
+# Cache d'import de Godot : entierement reconstruit a l'ouverture du projet.
+/Clients/client-godot/.godot/
+
+# Base et journaux du serveur data : des donnees, pas du code.
+/Servers/Server_Data/unirique_data.db
+/Servers/Server_Data/logs/
+
+# Reglages et manifeste de mise a jour, propres a chaque machine.
+/version.txt
+/manifest.json

@@ -1,0 +1,67 @@
+package unirique:game@0.0.0;
+
+interface scene {
+    object-spawn: func() -> u64;
+    object-destroy: func(objectid: u64);
+    
+    object-set-position: func(objectid: u64, x: f32, y: f32, z: f32);
+    object-get-position-x: func(objectid: u64) -> f32;
+    object-get-position-y: func(objectid: u64) -> f32;
+    object-get-position-z: func(objectid: u64) -> f32;
+    
+    object-set-rotation: func(objectid: u64, x: f32, y: f32, z: f32, w: f32);
+    object-get-rotation-x: func(objectid: u64) -> f32;
+    object-get-rotation-y: func(objectid: u64) -> f32;
+    object-get-rotation-z: func(objectid: u64) -> f32;
+    object-get-rotation-w: func(objectid: u64) -> f32;
+
+    object-set-scale: func(objectid: u64, x: f32, y: f32, z: f32);
+    object-get-scale-x: func(objectid: u64) -> f32;
+    object-get-scale-y: func(objectid: u64) -> f32;
+    object-get-scale-z: func(objectid: u64) -> f32;
+
+    object-set-color: func(objectid: u64, argb: u32);
+    object-get-color: func(objectid: u64) -> u32;
+
+    // Réplication. 0 = local (jamais envoyé)
+    //              1 = serveur -> clients (autorité serveur)
+    //              2 = client -> serveur (autorité client, ex. son propre avatar)
+    object-set-sync: func(objectid: u64, mode: u32);
+
+    object-set-interactive: func(objectid: u64, interactive: bool);
+
+    log: func(value: f64);
+}
+
+interface client {
+    input-value: func(codekey: u32) -> f32;
+}
+
+interface server {
+    // Entrées d'UN joueur précis. Mêmes codes.
+    input-value: func(playerid:u64, codekey: u32) -> f32;
+
+    // Nombre de joueurs connectés.
+    player-count: func() -> u32;
+}
+
+// Ce que le JEU fournit (l'hôte appelle).
+world game-client{
+    import scene;
+    import client;
+
+    export start: func();
+    export update: func(dt: f32);
+}
+
+world game-server {
+    import scene;
+    import server;
+
+    export start: func();
+    export update: func(dt: f32);
+
+    // L'hôte previent quand un joueur arrive ou part.
+    export player-join: func(playerid: u64, objectid: u64);
+    export player-leave: func(playerid: u64, objectid: u64);
+}

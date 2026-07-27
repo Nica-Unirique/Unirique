@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+	"Norms/api/Rust",
+	"Norms/identity/Rust",
+	"Games/hub/client",
+	"Games/hub/server",
+	"Games/collect",
+]
+exclude = ["Servers/Server_Data"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"

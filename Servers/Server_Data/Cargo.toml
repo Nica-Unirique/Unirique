@@ -1,0 +1,22 @@
+[package]
+name = "unirique_server_data"
+version = "0.1.0"
+edition = "2021"
+
+# Crate AUTONOME : son propre workspace pour rester independante du workspace du moteur.
+[workspace]
+
+[[bin]]
+name = "unirique_server_data"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+ed25519-dalek = "2"
+rand = "0.8"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+csv = "1"
