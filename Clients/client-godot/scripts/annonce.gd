@@ -20,11 +20,24 @@ const PING_SECONDES := 10.0
 var data: Data
 var compte: Compte
 
+## Ce qu'on nous demande de publier, indépendamment de notre capacité à le faire
+## maintenant. Cette mémoire est le cœur du dispositif : le serveur local naît
+## au démarrage, AVANT que la session ne soit ouverte, et une tentative unique
+## arriverait donc toujours trop tôt. La demande, elle, attend son heure.
+var port_demande := 0
+var jeu_demande := ""
+
 ## Identifiant attribué par l'annuaire, "" tant qu'on ne publie pas.
 var serveur_id := ""
-## Mémorisés pour la seconde déclaration, quand UPnP aura fini.
-var port_publie := 0
-var jeu_publie := ""
+## Visibilité sous laquelle on s'est déclaré. Sans ça, on ne saurait pas
+## distinguer un apply qui la périme d'un apply sur la qualité graphique — et on
+## se redéclarerait à chaque passage dans les réglages.
+var visibilite_publiee := ""
+## Vrai le temps d'un aller-retour avec l'annuaire. Une reconsidération peut
+## survenir pendant cette attente ; sans ce drapeau on se déclarerait deux fois,
+## et l'entrée orpheline resterait visible jusqu'à son oubli.
+var en_cours := false
+
 var minuteur: Timer
 var upnp: Upnp
 
@@ -38,23 +51,37 @@ func _ready() -> void:
 	upnp = Upnp.new()
 	add_child(upnp)
 
+	# Publier dépend de trois entrées : la session, `server.publish` et
+	# `server.visibility`. On se rebranche sur chacune plutôt que de choisir le
+	# bon moment pour tester — un moment juste n'existe pas ici.
+	compte.change.connect(_reconsiderer)
+	Settings.applied.connect(_reconsiderer)
 
-## Déclare le serveur local. Sans compte ou si le réglage l'interdit, on ne
-## publie rien — et on ne dira donc jamais à personne où l'on joue.
+
+## Demande la publication du serveur local. Elle sera honorée dès que possible :
+## tout de suite si la session est ouverte, à son ouverture sinon.
 func publier(port: int, jeu: String) -> void:
-	arreter()
-	# Se taire ici a déjà coûté une session de test : personne ne voyait
-	# l'hôte, et rien n'expliquait pourquoi. Un refus doit dire son motif.
+	_depublier()
+	port_demande = port
+	jeu_demande = jeu
+	_tenter()
+
+
+## Les gardes vivent ICI et nulle part ailleurs. Un refus n'est jamais définitif :
+## `_reconsiderer` repassera quand sa cause aura disparu.
+func _tenter() -> void:
+	if port_demande == 0 or en_cours or not serveur_id.is_empty():
+		return
+	# Se taire a déjà coûté une session de test : personne ne voyait l'hôte, et
+	# rien n'expliquait pourquoi. Un refus doit dire son motif.
 	if not compte.connecte:
-		print("[annonce] pas de compte : serveur non publié")
+		print("[annonce] pas de session : publication remise à l'ouverture")
 		return
 	if not Settings.get_value("server.publish"):
 		print("[annonce] réglage server.publish désactivé : serveur non publié")
 		return
-	port_publie = port
-	jeu_publie = jeu
 
-	if not await _enregistrer(adresses_joignables(port)):
+	if not await _enregistrer(adresses_joignables(port_demande)):
 		return
 
 	# UPnP ensuite, en arrière-plan : la découverte prend jusqu'à vingt secondes,
@@ -65,15 +92,35 @@ func publier(port: int, jeu: String) -> void:
 		_completer_par_upnp()
 
 
+## Rejoue la décision de publier. Appelée à chaque changement d'une entrée dont
+## elle dépend, et sans effet si rien de pertinent n'a bougé.
+func _reconsiderer() -> void:
+	var devrait := port_demande != 0 and compte.connecte \
+		and bool(Settings.get_value("server.publish"))
+	var publie := not serveur_id.is_empty()
+	var perimee: bool = publie and visibilite_publiee != Settings.get_value(
+		"server.visibility"
+	)
+
+	# Retirer d'abord, ajouter ensuite : couper le partage en pleine partie doit
+	# nous faire disparaître tout de suite, pas au prochain lancement.
+	if publie and (not devrait or perimee):
+		_depublier()
+		publie = false
+	if devrait and not publie:
+		_tenter()
+
+
 ## Une fois le port ouvert, on se redéclare avec l'adresse publique en plus.
 ## L'ancienne entrée n'est plus entretenue : l'annuaire l'oubliera seul.
 func _completer_par_upnp() -> void:
-	var attendu := port_publie
+	var attendu := port_demande
 	var publique := await upnp.ouvrir(attendu)
 	if publique.is_empty():
 		return
-	# On a pu arrêter ou changer de serveur pendant la découverte.
-	if serveur_id.is_empty() or port_publie != attendu:
+	# On a pu arrêter, changer de serveur ou cesser de publier pendant la
+	# découverte — vingt secondes laissent le temps de bien des choses.
+	if serveur_id.is_empty() or port_demande != attendu:
 		upnp.fermer()
 		return
 	await _enregistrer(adresses_joignables(attendu, publique))
@@ -84,12 +131,17 @@ func _enregistrer(adresses: PackedStringArray) -> bool:
 		push_warning("[annonce] aucune adresse réseau utilisable")
 		return false
 
+	# Lue avant l'envoi et retenue après : c'est bien SOUS cette visibilité-là
+	# qu'on figure dans l'annuaire, quoi que le réglage devienne ensuite.
+	var visibilite: String = Settings.get_value("server.visibility")
+	en_cours = true
 	var reponse: Dictionary = await data.post_json("/servers/register", {
 		"nom": "Serveur de %s" % compte.pseudo,
 		"adresses": adresses,
-		"jeu": jeu_publie,
-		"visibilite": Settings.get_value("server.visibility"),
+		"jeu": jeu_demande,
+		"visibilite": visibilite,
 	}, compte.token)
+	en_cours = false
 
 	if not reponse["ok"]:
 		push_warning("[annonce] publication refusée : %s" % reponse["json"].get(
@@ -98,6 +150,7 @@ func _enregistrer(adresses: PackedStringArray) -> bool:
 		return false
 
 	serveur_id = reponse["json"].get("serveur_id", "")
+	visibilite_publiee = visibilite
 	# La présence ne transmet QUE cet identifiant : c'est l'annuaire, qui connaît
 	# la politique du serveur, qui décide ensuite à qui le révéler.
 	compte.serveur_courant = serveur_id
@@ -111,10 +164,20 @@ func _enregistrer(adresses: PackedStringArray) -> bool:
 	return true
 
 
-## On cesse d'entretenir le serveur ; l'annuaire l'oubliera de lui-même au bout
-## de son seuil. Aucune route de retrait n'existe, et c'est cohérent : un hôte
-## qui plante ne pourrait pas l'appeler non plus.
+## On quitte le serveur : plus rien à publier, ni maintenant ni plus tard.
+## L'annuaire oubliera l'entrée de lui-même au bout de son seuil. Aucune route de
+## retrait n'existe, et c'est cohérent : un hôte qui plante ne pourrait pas
+## l'appeler non plus.
 func arreter() -> void:
+	port_demande = 0
+	jeu_demande = ""
+	_depublier()
+
+
+## Cesse d'entretenir la publication mais GARDE la demande : une session qui se
+## ferme puis se rouvre, un partage qu'on rallume, et l'on republie sans que le
+## joueur ait eu à quitter son monde.
+func _depublier() -> void:
 	minuteur.stop()
 	# Refermer la redirection : une box la garderait sinon jusqu'à son
 	# redémarrage, laissant un port ouvert vers plus rien.
@@ -122,7 +185,7 @@ func arreter() -> void:
 		upnp.fermer()
 	var publiait := not serveur_id.is_empty()
 	serveur_id = ""
-	port_publie = 0
+	visibilite_publiee = ""
 	compte.serveur_courant = ""
 	# Dire tout de suite qu'on n'y est plus, plutôt que d'y paraître encore
 	# jusqu'au battement suivant.
@@ -138,11 +201,13 @@ func _pinguer() -> void:
 		"nb_joueurs": 1,  # le compte réel viendra du serveur de jeu
 	}, compte.token)
 
-	# L'annuaire a pu nous oublier (redémarrage, seuil dépassé) : on se
-	# redéclare plutôt que de continuer à pinguer dans le vide.
+	# L'annuaire a pu nous oublier (redémarrage, seuil dépassé). On se redéclare
+	# vraiment — l'ancien code se contentait d'arrêter, en promettant l'inverse
+	# dans son commentaire, et le serveur ne revenait jamais.
 	if not reponse["ok"]:
-		push_warning("[annonce] heartbeat refusé, serveur oublié")
-		arreter()
+		push_warning("[annonce] heartbeat refusé : on se redéclare")
+		_depublier()
+		_tenter()
 
 
 ## Préfixes des réseaux privés IPv4, par ordre de préférence. Prendre la
